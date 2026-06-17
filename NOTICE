@@ -1,0 +1,10 @@
+query-history-diagnosis
+
+이 프로젝트는 databricks-perf-toolkit (Apache License 2.0) 의 구조·컨벤션·일부 코드
+(Lakeview 대시보드 빌더 클래스/헬퍼, idempotent _save 패턴, 진단 임계값/비용 모델)를
+기반·파생하여 작성되었습니다.
+
+Upstream: https://github.com/akuwano-db/databricks-perf-toolkit
+
+Portions Copyright the databricks-perf-toolkit authors, licensed under the
+Apache License, Version 2.0. See LICENSE.

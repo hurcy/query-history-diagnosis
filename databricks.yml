@@ -1,0 +1,133 @@
+# Databricks Asset Bundle — Query History Diagnosis
+#
+# SQL Warehouse 시스템 테이블 기반 성능 트리아지. Serverless Job 불가 + 비용 민감
+# 고객용으로, 소형 비-Serverless 스팟 Job Cluster 에서 수동 실행한다.
+#
+# 사용법:
+#   cp local-overrides.yml.sample local-overrides.yml   # 값 수정
+#   databricks bundle deploy -t dev
+#   databricks bundle run query_history_analysis -t dev
+bundle:
+  name: query-history-diagnosis
+
+include:
+  - local-override*.yml
+
+variables:
+  warehouse_id:
+    description: "대시보드 쿼리 실행용 SQL Warehouse ID"
+    default: ""
+  qh_catalog:
+    description: "Gold 테이블 출력 카탈로그"
+    default: "main"
+  qh_schema:
+    description: "Gold 테이블 출력 스키마"
+    default: "query_history"
+  qh_table_prefix:
+    description: "테이블 접두사"
+    default: "QH_"
+  qh_warehouse_ids:
+    description: "분석 대상 warehouse ID (콤마구분, 비우면 전체)"
+    default: ""
+  qh_lookback_days:
+    description: "분석 기간(일)"
+    default: "30"
+  qh_recent_days:
+    description: "회귀 탐지 최근 구간(일)"
+    default: "7"
+  qh_top_n_tables:
+    description: "테이블 헬스 점검 상위 N개"
+    default: "50"
+  qh_enable_cost:
+    description: "system.billing.usage 비용 분석 포함"
+    default: "true"
+  qh_enable_warehouse_events:
+    description: "system.compute.warehouse_events 포함"
+    default: "true"
+  qh_enable_table_health:
+    description: "DESCRIBE DETAIL/HISTORY 테이블 헬스 포함"
+    default: "true"
+  qh_dashboard_parent_path:
+    description: "Lakeview 대시보드 워크스페이스 폴더"
+    default: "/Shared/query-history-analysis"
+  qh_dashboard_name:
+    description: "Lakeview 대시보드 표시명"
+    default: "Query History Analysis"
+  # 비-Serverless Job Cluster (스팟) — 고객 serverless 불가 / 비용 민감
+  qh_spark_version:
+    description: "Job cluster Databricks Runtime (LTS 권장)"
+    default: "15.4.x-scala2.12"
+  qh_node_type_id:
+    description: "Azure node type"
+    default: "Standard_DS3_v2"
+  qh_num_workers:
+    description: "Job cluster worker 수 (소형이면 0=single-node, 대형이면 상향)"
+    default: 2
+
+resources:
+  jobs:
+    query_history_analysis:
+      name: "[${bundle.target}] Query History Analysis"
+      description: "Reads system.query.history (+billing/compute/access) → Gold Delta → Lakeview dashboard. Rule-based, no LLM. Manually triggered."
+
+      job_clusters:
+        - job_cluster_key: qh_cluster
+          new_cluster:
+            spark_version: ${var.qh_spark_version}
+            node_type_id: ${var.qh_node_type_id}
+            num_workers: ${var.qh_num_workers}
+            # Unity Catalog 시스템 테이블 + 임의 테이블 DESCRIBE 접근에 필요
+            data_security_mode: SINGLE_USER
+            # 비용 최적화: 스팟 우선, 부족 시 온디맨드 폴백. 드라이버는 온디맨드 1대.
+            azure_attributes:
+              availability: SPOT_WITH_FALLBACK_AZURE
+              first_on_demand: 1
+              spot_bid_max_price: -1
+
+      tasks:
+        - task_key: analyze
+          job_cluster_key: qh_cluster
+          notebook_task:
+            notebook_path: ./notebooks/01_query_history_analysis.py
+            base_parameters:
+              catalog: ${var.qh_catalog}
+              schema: ${var.qh_schema}
+              table_prefix: ${var.qh_table_prefix}
+              warehouse_ids: ${var.qh_warehouse_ids}
+              lookback_days: ${var.qh_lookback_days}
+              recent_days: ${var.qh_recent_days}
+              top_n_tables: ${var.qh_top_n_tables}
+              enable_cost: ${var.qh_enable_cost}
+              enable_warehouse_events: ${var.qh_enable_warehouse_events}
+              enable_table_health: ${var.qh_enable_table_health}
+
+        - task_key: dashboard
+          job_cluster_key: qh_cluster
+          depends_on:
+            - task_key: analyze
+          notebook_task:
+            notebook_path: ./notebooks/02_query_history_dashboard.py
+            base_parameters:
+              catalog: ${var.qh_catalog}
+              schema: ${var.qh_schema}
+              table_prefix: ${var.qh_table_prefix}
+              warehouse_id: ${var.warehouse_id}
+              parent_path: ${var.qh_dashboard_parent_path}
+              dash_name: ${var.qh_dashboard_name}
+              existing_dashboard_id: ""
+
+      queue:
+        enabled: true
+
+      tags:
+        project: "query-history-diagnosis"
+        component: "analysis"
+
+targets:
+  dev:
+    default: true
+    mode: development
+  staging:
+    mode: production
+  prod:
+    mode: production

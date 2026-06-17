@@ -1,0 +1,18 @@
+# 로컬 환경 설정 (시크릿/환경별 값 포함 가능)
+local-overrides.yml
+local-override*.yml
+!local-overrides.yml.sample
+
+# DABs
+.databricks/
+*.tfstate
+*.tfstate.backup
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

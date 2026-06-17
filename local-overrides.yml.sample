@@ -1,0 +1,47 @@
+# 로컬 환경 오버라이드 (git 에 커밋하지 않음 — .gitignore 처리됨)
+#
+#   cp local-overrides.yml.sample local-overrides.yml
+#   local-overrides.yml 값을 환경에 맞게 수정
+#   databricks bundle deploy -t dev
+#
+# workspace.profile 은 ~/.databrickscfg 의 프로파일명 (databricks auth login 으로 설정).
+# 카탈로그/스키마는 미리 존재하거나 CREATE 권한이 있어야 한다.
+
+targets:
+  dev:
+    workspace:
+      profile: DEFAULT
+    variables:
+      warehouse_id: "your-warehouse-id"      # 대시보드 바인딩용 SQL Warehouse
+      qh_catalog: "main"                     # Gold 출력 카탈로그 (쓰기 권한 필요)
+      qh_schema: "query_history"             # Gold 출력 스키마
+      qh_table_prefix: "QH_"
+      qh_warehouse_ids: ""                   # 특정 WH 만: "id1,id2", 비우면 전체
+      qh_lookback_days: "30"
+      qh_recent_days: "7"
+      qh_top_n_tables: "50"
+      qh_enable_cost: "true"                 # system.billing 미활성 시 "false"
+      qh_enable_warehouse_events: "true"     # system.compute 미활성 시 "false"
+      qh_enable_table_health: "true"
+      qh_dashboard_parent_path: "/Shared/query-history-analysis"
+      qh_dashboard_name: "Query History Analysis"
+      # 잡 클러스터 (Azure). 대형 플릿이면 num_workers 상향, 소형이면 0(single-node).
+      qh_spark_version: "15.4.x-scala2.12"
+      qh_node_type_id: "Standard_DS3_v2"
+      qh_num_workers: 2
+
+  # staging:
+  #   workspace:
+  #     profile: DEFAULT
+  #   variables:
+  #     warehouse_id: "your-warehouse-id"
+  #     qh_catalog: "main"
+  #     qh_schema: "query_history"
+
+  # prod:
+  #   workspace:
+  #     profile: DEFAULT
+  #   variables:
+  #     warehouse_id: "your-prod-warehouse-id"
+  #     qh_catalog: "main"
+  #     qh_schema: "query_history"
